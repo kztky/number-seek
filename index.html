@@ -1,0 +1,377 @@
+import React, { useState } from 'react';
+import { RotateCcw, HelpCircle, Target } from 'lucide-react';
+
+const NumberGuessGame = () => {
+  const [answer, setAnswer] = useState(() => Math.floor(Math.random() * 100) + 1);
+  const [answersLeft, setAnswersLeft] = useState(5);
+  const [hintsUsed, setHintsUsed] = useState(0);
+  const [gameState, setGameState] = useState('playing'); // 'playing', 'won', 'lost'
+  const [history, setHistory] = useState([]);
+  const [wins, setWins] = useState(0);
+  const [losses, setLosses] = useState(0);
+  const [conditions, setConditions] = useState([]);
+  const [selectedAnswer, setSelectedAnswer] = useState('');
+
+  // 全条件を満たす候補数を計算
+  const getCandidates = (conditionsList) => {
+    const candidates = [];
+    for (let n = 1; n <= 100; n++) {
+      let valid = true;
+      for (const cond of conditionsList) {
+        if (cond.type === 'min' && n < cond.value) valid = false;
+        if (cond.type === 'max' && n > cond.value) valid = false;
+        if (cond.type === 'even' && n % 2 !== 0) valid = false;
+        if (cond.type === 'odd' && n % 2 === 0) valid = false;
+        if (cond.type === 'multiple5' && n % 5 !== 0) valid = false;
+        if (cond.type === 'notMultiple5' && n % 5 === 0) valid = false;
+      }
+      if (valid) candidates.push(n);
+    }
+    return candidates;
+  };
+
+  const currentCandidates = getCandidates(conditions);
+  const candidateCount = currentCandidates.length;
+  const minCandidate = currentCandidates.length > 0 ? Math.min(...currentCandidates) : 1;
+  const maxCandidate = currentCandidates.length > 0 ? Math.max(...currentCandidates) : 100;
+
+  const resetGame = () => {
+    setAnswer(Math.floor(Math.random() * 100) + 1);
+    setAnswersLeft(5);
+    setHintsUsed(0);
+    setGameState('playing');
+    setHistory([]);
+    setConditions([]);
+    setSelectedAnswer('');
+  };
+
+  const addHistory = (text, type) => {
+    setHistory(prev => [...prev, { text, type }]);
+  };
+
+  const useHint = (hintType, value = null) => {
+    if (gameState !== 'playing') return;
+
+    let result = '';
+    let newConditions = [...conditions];
+
+    switch (hintType) {
+      case 'bigger':
+        if (answer > value) {
+          result = `はい、${value}より大きいです`;
+          newConditions.push({ type: 'min', value: value + 1 });
+        } else {
+          result = `いいえ、${value}以下です`;
+          newConditions.push({ type: 'max', value: value });
+        }
+        break;
+      case 'smaller':
+        if (answer < value) {
+          result = `はい、${value}より小さいです`;
+          newConditions.push({ type: 'max', value: value - 1 });
+        } else {
+          result = `いいえ、${value}以上です`;
+          newConditions.push({ type: 'min', value: value });
+        }
+        break;
+      case 'even':
+        if (answer % 2 === 0) {
+          result = 'はい、偶数です';
+          newConditions.push({ type: 'even' });
+        } else {
+          result = 'いいえ、奇数です';
+          newConditions.push({ type: 'odd' });
+        }
+        break;
+      case 'odd':
+        if (answer % 2 === 1) {
+          result = 'はい、奇数です';
+          newConditions.push({ type: 'odd' });
+        } else {
+          result = 'いいえ、偶数です';
+          newConditions.push({ type: 'even' });
+        }
+        break;
+      case 'multiple5':
+        if (answer % 5 === 0) {
+          result = 'はい、5の倍数です';
+          newConditions.push({ type: 'multiple5' });
+        } else {
+          result = 'いいえ、5の倍数ではありません';
+          newConditions.push({ type: 'notMultiple5' });
+        }
+        break;
+      case 'range1-50':
+        if (answer <= 50) {
+          result = 'はい、1〜50の間です';
+          newConditions.push({ type: 'max', value: 50 });
+        } else {
+          result = 'いいえ、51〜100の間です';
+          newConditions.push({ type: 'min', value: 51 });
+        }
+        break;
+      case 'range51-100':
+        if (answer >= 51) {
+          result = 'はい、51〜100の間です';
+          newConditions.push({ type: 'min', value: 51 });
+        } else {
+          result = 'いいえ、1〜50の間です';
+          newConditions.push({ type: 'max', value: 50 });
+        }
+        break;
+    }
+
+    setConditions(newConditions);
+    const newCandidates = getCandidates(newConditions);
+    addHistory(`${result}（候補: ${newCandidates.length}個）`, 'hint');
+    setHintsUsed(hintsUsed + 1);
+  };
+
+  const submitAnswer = () => {
+    if (answersLeft === 0 || gameState !== 'playing' || !selectedAnswer) return;
+
+    const num = parseInt(selectedAnswer);
+    if (isNaN(num) || num < 1 || num > 100) {
+      addHistory('1〜100の数字を入力してください', 'error');
+      return;
+    }
+
+    if (num === answer) {
+      addHistory(`🎉 正解です！答えは ${answer} でした！`, 'success');
+      setGameState('won');
+      setWins(wins + 1);
+    } else {
+      const remaining = answersLeft - 1;
+      if (remaining === 0) {
+        addHistory(`❌ 残念！答えは ${answer} でした`, 'error');
+        setGameState('lost');
+        setLosses(losses + 1);
+      } else {
+        const hint = num < answer ? 'もっと大きい数です' : 'もっと小さい数です';
+        addHistory(`${num} は不正解。${hint}（残り${remaining}回）`, 'wrong');
+        setAnswersLeft(remaining);
+      }
+    }
+    setSelectedAnswer('');
+  };
+
+  const getMidValue = () => {
+    if (currentCandidates.length === 0) return 50;
+    return currentCandidates[Math.floor(currentCandidates.length / 2)];
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
+      <div className="max-w-2xl mx-auto">
+        {/* ヘッダー */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-3xl font-bold text-gray-800">🎯 数当てゲーム</h1>
+            <button
+              onClick={resetGame}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition"
+            >
+              <RotateCcw size={20} />
+              リセット
+            </button>
+          </div>
+
+          {/* スコア表示 */}
+          <div className="flex gap-4 text-lg font-semibold">
+            <div className="text-green-600">勝ち: {wins}</div>
+            <div className="text-red-600">負け: {losses}</div>
+          </div>
+        </div>
+
+        {/* ゲーム説明 */}
+        {history.length === 0 && gameState === 'playing' && (
+          <div className="bg-blue-100 rounded-xl p-6 mb-4">
+            <h2 className="text-xl font-bold mb-2">🎮 あそびかた</h2>
+            <p className="text-gray-700 mb-2">1〜100の数字を当ててね！</p>
+            <div className="space-y-1 text-sm text-gray-600">
+              <p>• ヒント: <strong>何回でも使える！</strong></p>
+              <p>• 解答権: {answersLeft}回</p>
+              <p>• じっくり考えて正解を探そう！</p>
+            </div>
+          </div>
+        )}
+
+        {/* ターン表示 */}
+        {gameState === 'playing' && (
+          <div className="bg-white rounded-xl shadow p-4 mb-4">
+            <div className="flex justify-between items-center text-lg">
+              <div className="flex items-center gap-2">
+                <HelpCircle className="text-blue-500" />
+                <span>ヒント使用: <strong>{hintsUsed}回</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Target className="text-green-500" />
+                <span>解答残り: <strong>{answersLeft}回</strong></span>
+              </div>
+            </div>
+            <div className="mt-2 text-sm text-gray-600">
+              候補範囲: {minCandidate} 〜 {maxCandidate} ({candidateCount}個)
+            </div>
+          </div>
+        )}
+
+        {/* ヒントボタン */}
+        {gameState === 'playing' && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-4">
+            <h3 className="text-lg font-bold mb-3">💡 ヒントを使う（何回でもOK！）</h3>
+            
+            {/* 自由入力ヒント */}
+            <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
+              <p className="text-sm font-semibold mb-2 text-gray-700">🎯 好きな数字で質問</p>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={selectedAnswer}
+                  onChange={(e) => setSelectedAnswer(e.target.value)}
+                  placeholder="数字を入力"
+                  className="flex-1 p-3 text-xl border-2 border-blue-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                  min="1"
+                  max="100"
+                />
+                <button
+                  onClick={() => {
+                    const num = parseInt(selectedAnswer);
+                    if (!isNaN(num) && num >= 1 && num <= 100) {
+                      useHint('bigger', num);
+                    }
+                  }}
+                  disabled={!selectedAnswer}
+                  className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition font-bold whitespace-nowrap"
+                >
+                  より大きい？
+                </button>
+                <button
+                  onClick={() => {
+                    const num = parseInt(selectedAnswer);
+                    if (!isNaN(num) && num >= 1 && num <= 100) {
+                      useHint('smaller', num);
+                    }
+                  }}
+                  disabled={!selectedAnswer}
+                  className="px-6 py-3 bg-purple-500 text-white rounded-lg hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition font-bold whitespace-nowrap"
+                >
+                  より小さい？
+                </button>
+              </div>
+            </div>
+
+            {/* その他のヒント */}
+            <p className="text-sm font-semibold mb-2 text-gray-700">🔍 その他の質問</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => useHint('even')}
+                className="p-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-semibold"
+              >
+                偶数？
+              </button>
+              <button
+                onClick={() => useHint('odd')}
+                className="p-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-semibold"
+              >
+                奇数？
+              </button>
+              <button
+                onClick={() => useHint('multiple5')}
+                className="p-4 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-semibold"
+              >
+                5の倍数？
+              </button>
+              <button
+                onClick={() => useHint('range1-50')}
+                className="p-4 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition text-sm font-semibold"
+              >
+                1〜50の間？
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 解答入力 */}
+        {gameState === 'playing' && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-4">
+            <h3 className="text-lg font-bold mb-3">🎯 答えを入力</h3>
+            <div className="flex gap-3">
+              <input
+                type="number"
+                value={selectedAnswer}
+                onChange={(e) => setSelectedAnswer(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && submitAnswer()}
+                placeholder="1〜100の数字"
+                className="flex-1 p-4 text-2xl border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                min="1"
+                max="100"
+              />
+              <button
+                onClick={submitAnswer}
+                disabled={answersLeft === 0 || !selectedAnswer}
+                className="px-8 py-4 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition font-bold text-lg"
+              >
+                解答！
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 履歴 */}
+        {history.length > 0 && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-4">
+            <h3 className="text-lg font-bold mb-3">📝 履歴</h3>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {history.map((item, index) => (
+                <div
+                  key={index}
+                  className={`p-3 rounded-lg ${
+                    item.type === 'hint' ? 'bg-blue-50 text-blue-800' :
+                    item.type === 'success' ? 'bg-green-50 text-green-800' :
+                    item.type === 'error' ? 'bg-red-50 text-red-800' :
+                    'bg-yellow-50 text-yellow-800'
+                  }`}
+                >
+                  {item.text}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* リザルト */}
+        {gameState !== 'playing' && (
+          <div className={`rounded-xl shadow-lg p-8 text-center ${
+            gameState === 'won' ? 'bg-green-100' : 'bg-red-100'
+          }`}>
+            <div className="text-6xl mb-4">{gameState === 'won' ? '🎉' : '😢'}</div>
+            <h2 className="text-3xl font-bold mb-4">
+              {gameState === 'won' ? 'クリア！' : 'ざんねん...'}
+            </h2>
+            <p className="text-xl mb-2">
+              {gameState === 'won' 
+                ? `ヒント ${hintsUsed}回で正解！`
+                : '次はがんばろう！'
+              }
+            </p>
+            {gameState === 'won' && (
+              <p className="text-gray-600 mb-6">
+                {hintsUsed <= 7 ? '素晴らしい質問力です！🌟' :
+                 hintsUsed <= 10 ? 'よく考えて当てられましたね！👏' :
+                 'がんばりました！次はもっと少ないヒントで当ててみよう！💪'}
+              </p>
+            )}
+            <button
+              onClick={resetGame}
+              className="px-8 py-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition font-bold text-lg"
+            >
+              もう一度あそぶ
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default NumberGuessGame;
